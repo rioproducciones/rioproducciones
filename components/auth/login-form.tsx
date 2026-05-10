@@ -19,11 +19,24 @@ export function LoginForm({ next = "/admin" }: { next?: string }) {
     setLoading(true);
     setError(null);
 
-    const supabase = createBrowserSupabaseClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    let signInError: { message?: string } | null = null;
+
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const result = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      signInError = result.error;
+    } catch (clientError) {
+      setLoading(false);
+      setError(
+        clientError instanceof Error && clientError.message.includes("NEXT_PUBLIC_SUPABASE")
+          ? "Faltan variables públicas de Supabase. Revisá .env.local y reiniciá el servidor."
+          : "No pudimos conectar con Supabase."
+      );
+      return;
+    }
 
     if (signInError) {
       setLoading(false);

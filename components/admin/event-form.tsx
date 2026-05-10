@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,38 @@ type InitialEvent = {
 function toDateTimeLocal(value?: string) {
   if (!value) return "";
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function toIsoDateTime(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, yearValue, monthValue, dayValue, hourValue, minuteValue] = match;
+  const year = Number(yearValue);
+  const month = Number(monthValue) - 1;
+  const day = Number(dayValue);
+  const hour = Number(hourValue);
+  const minute = Number(minuteValue);
+  const date = new Date(year, month, day, hour, minute);
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month ||
+    date.getDate() !== day ||
+    date.getHours() !== hour ||
+    date.getMinutes() !== minute
+  ) {
+    return null;
+  }
+
+  return date.toISOString();
 }
 
 const emptyTicketType: TicketTypePayload = {
@@ -58,6 +89,23 @@ const emptyTicketType: TicketTypePayload = {
   max_per_order: 10,
   is_active: true
 };
+
+function Field({
+  label,
+  className,
+  children
+}: {
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className={`grid gap-1.5 ${className || ""}`}>
+      <span className="text-sm font-semibold text-white/70">{label}</span>
+      {children}
+    </label>
+  );
+}
 
 export function EventForm({ initialEvent }: { initialEvent?: InitialEvent }) {
   const router = useRouter();
@@ -99,10 +147,18 @@ export function EventForm({ initialEvent }: { initialEvent?: InitialEvent }) {
     setLoading(true);
     setError(null);
 
+    const eventDate = toIsoDateTime(event.event_date);
+
+    if (!eventDate) {
+      setError("Ingresá una fecha y hora válidas para el evento.");
+      setLoading(false);
+      return;
+    }
+
     const payload = {
       ...event,
       slug: event.slug || slugify(event.name),
-      event_date: new Date(event.event_date).toISOString(),
+      event_date: eventDate,
       cover_image_url: event.cover_image_url || null,
       description: event.description || null,
       location: event.location || null,
@@ -134,57 +190,69 @@ export function EventForm({ initialEvent }: { initialEvent?: InitialEvent }) {
       <section className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
         <h2 className="text-xl font-black">Evento</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Input
-            required
-            placeholder="Nombre"
-            value={event.name}
-            onChange={(inputEvent) =>
-              setEvent((current) => ({
-                ...current,
-                name: inputEvent.target.value,
-                slug: current.slug || slugify(inputEvent.target.value)
-              }))
-            }
-          />
-          <Input
-            required
-            placeholder="slug-del-evento"
-            value={event.slug}
-            onChange={(inputEvent) => setEvent({ ...event, slug: inputEvent.target.value })}
-          />
-          <Input
-            required
-            type="datetime-local"
-            value={event.event_date}
-            onChange={(inputEvent) => setEvent({ ...event, event_date: inputEvent.target.value })}
-          />
-          <Input
-            placeholder="Lugar"
-            value={event.location}
-            onChange={(inputEvent) => setEvent({ ...event, location: inputEvent.target.value })}
-          />
-          <Input
-            className="sm:col-span-2"
-            placeholder="URL de imagen"
-            value={event.cover_image_url}
-            onChange={(inputEvent) => setEvent({ ...event, cover_image_url: inputEvent.target.value })}
-          />
-          <Select
-            value={event.status}
-            onChange={(inputEvent) =>
-              setEvent({ ...event, status: inputEvent.target.value as EventPayload["status"] })
-            }
-          >
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-            <option value="archived">Archived</option>
-          </Select>
-          <Textarea
-            className="sm:col-span-2"
-            placeholder="Descripción"
-            value={event.description}
-            onChange={(inputEvent) => setEvent({ ...event, description: inputEvent.target.value })}
-          />
+          <Field label="Nombre del evento">
+            <Input
+              required
+              placeholder="Nombre"
+              value={event.name}
+              onChange={(inputEvent) =>
+                setEvent((current) => ({
+                  ...current,
+                  name: inputEvent.target.value,
+                  slug: current.slug || slugify(inputEvent.target.value)
+                }))
+              }
+            />
+          </Field>
+          <Field label="Slug de la URL">
+            <Input
+              required
+              placeholder="slug-del-evento"
+              value={event.slug}
+              onChange={(inputEvent) => setEvent({ ...event, slug: inputEvent.target.value })}
+            />
+          </Field>
+          <Field label="Fecha y hora">
+            <Input
+              required
+              type="datetime-local"
+              value={event.event_date}
+              onChange={(inputEvent) => setEvent({ ...event, event_date: inputEvent.target.value })}
+            />
+          </Field>
+          <Field label="Lugar">
+            <Input
+              placeholder="Lugar"
+              value={event.location}
+              onChange={(inputEvent) => setEvent({ ...event, location: inputEvent.target.value })}
+            />
+          </Field>
+          <Field label="Imagen de portada" className="sm:col-span-2">
+            <Input
+              placeholder="URL de imagen"
+              value={event.cover_image_url}
+              onChange={(inputEvent) => setEvent({ ...event, cover_image_url: inputEvent.target.value })}
+            />
+          </Field>
+          <Field label="Estado">
+            <Select
+              value={event.status}
+              onChange={(inputEvent) =>
+                setEvent({ ...event, status: inputEvent.target.value as EventPayload["status"] })
+              }
+            >
+              <option value="draft">Borrador</option>
+              <option value="published">Publicado</option>
+              <option value="archived">Archivado</option>
+            </Select>
+          </Field>
+          <Field label="Descripción" className="sm:col-span-2">
+            <Textarea
+              placeholder="Descripción"
+              value={event.description}
+              onChange={(inputEvent) => setEvent({ ...event, description: inputEvent.target.value })}
+            />
+          </Field>
         </div>
       </section>
 
@@ -207,34 +275,43 @@ export function EventForm({ initialEvent }: { initialEvent?: InitialEvent }) {
         <div className="mt-4 grid gap-3">
           {event.ticket_types.map((ticketType, index) => (
             <div key={ticketType.id || index} className="rounded-lg border border-white/10 bg-black/20 p-3">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                <Input
-                  className="lg:col-span-2"
-                  placeholder="Nombre"
-                  value={ticketType.name}
-                  onChange={(inputEvent) => updateTicketType(index, { name: inputEvent.target.value })}
-                />
-                <Input
-                  type="number"
-                  placeholder="Precio"
-                  value={ticketType.price}
-                  onChange={(inputEvent) => updateTicketType(index, { price: Number(inputEvent.target.value) })}
-                />
-                <Input
-                  type="number"
-                  placeholder="Stock"
-                  value={ticketType.stock}
-                  onChange={(inputEvent) => updateTicketType(index, { stock: Number(inputEvent.target.value) })}
-                />
-                <Input
-                  type="number"
-                  placeholder="Máx."
-                  value={ticketType.max_per_order}
-                  onChange={(inputEvent) => updateTicketType(index, { max_per_order: Number(inputEvent.target.value) })}
-                />
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+                <Field label="Nombre de la entrada">
+                  <Input
+                    placeholder="Nombre"
+                    value={ticketType.name}
+                    onChange={(inputEvent) => updateTicketType(index, { name: inputEvent.target.value })}
+                  />
+                </Field>
+                <Field label="Precio (UYU)">
+                  <Input
+                    type="number"
+                    placeholder="Precio"
+                    value={ticketType.price}
+                    onChange={(inputEvent) => updateTicketType(index, { price: Number(inputEvent.target.value) })}
+                  />
+                </Field>
+                <Field label="Stock disponible">
+                  <Input
+                    type="number"
+                    placeholder="Stock"
+                    value={ticketType.stock}
+                    onChange={(inputEvent) => updateTicketType(index, { stock: Number(inputEvent.target.value) })}
+                  />
+                </Field>
+                <Field label="Máximo por compra">
+                  <Input
+                    type="number"
+                    placeholder="Máx."
+                    value={ticketType.max_per_order}
+                    onChange={(inputEvent) =>
+                      updateTicketType(index, { max_per_order: Number(inputEvent.target.value) })
+                    }
+                  />
+                </Field>
                 <Button
                   variant="ghost"
-                  className="px-0"
+                  className="mt-auto px-0"
                   onClick={() =>
                     setEvent((current) => ({
                       ...current,
@@ -245,14 +322,15 @@ export function EventForm({ initialEvent }: { initialEvent?: InitialEvent }) {
                 >
                   <Trash2 className="size-4" />
                 </Button>
-                <Input
-                  className="sm:col-span-2 lg:col-span-6"
-                  placeholder="Descripción"
-                  value={ticketType.description}
-                  onChange={(inputEvent) =>
-                    updateTicketType(index, { description: inputEvent.target.value })
-                  }
-                />
+                <Field label="Descripción de la entrada" className="sm:col-span-2 lg:col-span-5">
+                  <Input
+                    placeholder="Descripción"
+                    value={ticketType.description}
+                    onChange={(inputEvent) =>
+                      updateTicketType(index, { description: inputEvent.target.value })
+                    }
+                  />
+                </Field>
               </div>
             </div>
           ))}

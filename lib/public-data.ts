@@ -21,8 +21,17 @@ export async function getPublishedEvents() {
       status,
       ticket_types (
         id,
+        event_id,
+        name,
+        description,
         price,
         currency,
+        stock,
+        sold_count,
+        max_per_order,
+        sale_starts_at,
+        sale_ends_at,
+        created_at,
         is_active
       )
     `

@@ -2,46 +2,33 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, Minus, Plus, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { formatMoney } from "@/lib/utils";
+import { CalendarDays, MapPin, Minus, Plus } from "lucide-react";
+import { cn, formatMoney } from "@/lib/utils";
 import type { TicketType } from "@/lib/types";
-
-type Buyer = {
-  buyer_name: string;
-  buyer_lastname: string;
-  buyer_email: string;
-  buyer_phone: string;
-  buyer_document: string;
-};
 
 export function EventPurchaseForm({
   eventId,
-  ticketTypes
+  ticketTypes,
+  eventName,
+  eventLocation,
+  eventDate,
+  availableTickets
 }: {
   eventId: string;
   ticketTypes: TicketType[];
+  eventName?: string;
+  eventLocation?: string | null;
+  eventDate?: string;
+  availableTickets?: number;
 }) {
   const router = useRouter();
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [buyer, setBuyer] = useState<Buyer>({
-    buyer_name: "",
-    buyer_lastname: "",
-    buyer_email: "",
-    buyer_phone: "",
-    buyer_document: ""
-  });
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const selectedItems = useMemo(
     () =>
       ticketTypes
-        .map((ticketType) => ({
-          ticketType,
-          quantity: quantities[ticketType.id] || 0
-        }))
+        .map((tt) => ({ ticketType: tt, quantity: quantities[tt.id] || 0 }))
         .filter((item) => item.quantity > 0),
     [quantities, ticketTypes]
   );
@@ -50,159 +37,177 @@ export function EventPurchaseForm({
     (sum, item) => sum + item.ticketType.price * item.quantity,
     0
   );
+  const totalQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
 
-  function setQuantity(ticketType: TicketType, nextQuantity: number) {
-    const available = Math.max(ticketType.stock - ticketType.sold_count, 0);
-    const capped = Math.max(0, Math.min(nextQuantity, ticketType.max_per_order, available));
-    setQuantities((current) => ({
-      ...current,
-      [ticketType.id]: capped
-    }));
+  function setQuantity(tt: TicketType, next: number) {
+    const available = Math.max(tt.stock - tt.sold_count, 0);
+    const capped = Math.max(0, Math.min(next, tt.max_per_order, available));
+    setQuantities((prev) => ({ ...prev, [tt.id]: capped }));
   }
 
-  async function submitOrder(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function goToCheckout(e: React.FormEvent) {
+    e.preventDefault();
     setError(null);
-
     if (selectedItems.length === 0) {
       setError("Seleccioná al menos una entrada.");
       return;
     }
-
-    setLoading(true);
-
-    const response = await fetch("/api/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        event_id: eventId,
-        payment_provider: "mercadopago",
-        ...buyer,
-        items: selectedItems.map((item) => ({
-          ticket_type_id: item.ticketType.id,
-          quantity: item.quantity
-        }))
-      })
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      setLoading(false);
-      setError(result.error || "No pudimos crear la orden.");
-      return;
+    const params = new URLSearchParams({ event_id: eventId });
+    for (const item of selectedItems) {
+      params.append("items", `${item.ticketType.id}:${item.quantity}`);
     }
-
-    router.push(result.checkout_url);
+    router.push(`/checkout?${params.toString()}`);
   }
 
+  const formattedDate = eventDate
+    ? new Date(eventDate).toLocaleDateString("es-UY", {
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      })
+    : null;
+
   return (
-    <form onSubmit={submitOrder} className="glass-panel rounded-xl p-4 sm:p-5">
-      <div className="flex items-center gap-2 text-sm font-semibold text-rio-cyan">
-        <ShieldCheck className="size-4" />
-        Compra segura con QR único
-      </div>
+    <form onSubmit={goToCheckout} className="space-y-6">
+      {/* Event meta strip */}
+      {(eventName || eventLocation || formattedDate) && (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-white/50">
+          {formattedDate && (
+            <span className="flex items-center gap-1.5">
+              <CalendarDays className="size-3.5 text-rio-yellow" />
+              {formattedDate}
+            </span>
+          )}
+          {eventLocation && (
+            <span className="flex items-center gap-1.5">
+              <MapPin className="size-3.5 text-white/30" />
+              {eventLocation}
+            </span>
+          )}
+          {availableTickets !== undefined && availableTickets > 0 && (
+            <span className="ml-auto font-semibold text-white/40">
+              {availableTickets} disponibles
+            </span>
+          )}
+        </div>
+      )}
 
-      <div className="mt-4 grid gap-3">
-        {ticketTypes.map((ticketType) => {
-          const available = Math.max(ticketType.stock - ticketType.sold_count, 0);
-          const quantity = quantities[ticketType.id] || 0;
+      {/* Ticket cards */}
+      {ticketTypes.length === 0 ? (
+        <p className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-center text-sm text-white/40">
+          No hay entradas activas para este evento.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {ticketTypes.map((tt) => {
+            const available = Math.max(tt.stock - tt.sold_count, 0);
+            const qty = quantities[tt.id] || 0;
+            const soldOut = available === 0;
+            const selected = qty > 0;
 
-          return (
-            <div
-              key={ticketType.id}
-              className="rounded-lg border border-white/10 bg-black/[0.22] p-3"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="font-semibold">{ticketType.name}</h3>
-                  <p className="mt-1 text-sm text-white/[0.52]">{ticketType.description}</p>
-                  <p className="mt-2 text-sm text-white/[0.48]">
-                    {available > 0 ? `${available} disponibles` : "Agotada"}
-                  </p>
+            return (
+              <div
+                key={tt.id}
+                className={cn(
+                  "relative rounded-2xl border p-5 transition-all duration-150",
+                  selected
+                    ? "border-rio-cyan/40 bg-rio-cyan/[0.06] shadow-[0_0_0_1px_rgba(0,229,255,0.15)]"
+                    : "border-white/[0.08] bg-white/[0.03] hover:border-white/[0.14]",
+                  soldOut && "pointer-events-none opacity-40"
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-white">{tt.name}</p>
+                    {tt.description && (
+                      <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-white/[0.45]">
+                        {tt.description}
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 text-lg font-black tabular-nums",
+                      selected ? "text-rio-cyan" : "text-white"
+                    )}
+                  >
+                    {formatMoney(tt.price, tt.currency)}
+                  </span>
                 </div>
-                <div className="text-right">
-                  <div className="font-bold text-rio-cyan">
-                    {formatMoney(ticketType.price, ticketType.currency)}
+
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-white/25">
+                    {soldOut ? "Agotado" : `${available} disp.`}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={qty === 0}
+                      onClick={() => setQuantity(tt, qty - 1)}
+                      aria-label={`Restar ${tt.name}`}
+                      className="flex size-8 items-center justify-center rounded-full border border-white/10 text-white/50 transition hover:border-white/25 hover:text-white disabled:opacity-30"
+                    >
+                      <Minus className="size-3.5" />
+                    </button>
+                    <span className="min-w-5 text-center text-base font-black tabular-nums">
+                      {qty}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={soldOut || qty >= tt.max_per_order}
+                      onClick={() => setQuantity(tt, qty + 1)}
+                      aria-label={`Sumar ${tt.name}`}
+                      className="flex size-8 items-center justify-center rounded-full border border-white/10 text-white/50 transition hover:border-white/25 hover:text-white disabled:opacity-30"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex items-center justify-between">
-                <Button
-                  variant="secondary"
-                  className="size-11 px-0"
-                  disabled={quantity === 0}
-                  onClick={() => setQuantity(ticketType, quantity - 1)}
-                  aria-label={`Restar ${ticketType.name}`}
-                >
-                  <Minus className="size-4" />
-                </Button>
-                <span className="min-w-12 text-center text-lg font-bold">{quantity}</span>
-                <Button
-                  variant="secondary"
-                  className="size-11 px-0"
-                  disabled={available === 0 || quantity >= ticketType.max_per_order}
-                  onClick={() => setQuantity(ticketType, quantity + 1)}
-                  aria-label={`Sumar ${ticketType.name}`}
-                >
-                  <Plus className="size-4" />
-                </Button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <Input
-          required
-          placeholder="Nombre"
-          value={buyer.buyer_name}
-          onChange={(event) => setBuyer({ ...buyer, buyer_name: event.target.value })}
-        />
-        <Input
-          placeholder="Apellido"
-          value={buyer.buyer_lastname}
-          onChange={(event) => setBuyer({ ...buyer, buyer_lastname: event.target.value })}
-        />
-        <Input
-          required
-          type="email"
-          placeholder="Email"
-          value={buyer.buyer_email}
-          onChange={(event) => setBuyer({ ...buyer, buyer_email: event.target.value })}
-        />
-        <Input
-          required
-          placeholder="Teléfono"
-          value={buyer.buyer_phone}
-          onChange={(event) => setBuyer({ ...buyer, buyer_phone: event.target.value })}
-        />
-        <Input
-          className="sm:col-span-2"
-          placeholder="Documento / CI opcional"
-          value={buyer.buyer_document}
-          onChange={(event) => setBuyer({ ...buyer, buyer_document: event.target.value })}
-        />
-      </div>
-
-      {error ? (
-        <div className="mt-4 rounded-lg border border-red-400/30 bg-red-400/[0.12] p-3 text-sm text-red-100">
+      {error && (
+        <p className="rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-sm text-red-300">
           {error}
-        </div>
-      ) : null}
+        </p>
+      )}
 
-      <div className="mt-5 flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+      {/* Total + CTA */}
+      <div
+        className={cn(
+          "flex items-center justify-between rounded-2xl border px-5 py-4 transition-all duration-200",
+          totalQuantity > 0
+            ? "border-rio-cyan/25 bg-rio-cyan/[0.06]"
+            : "border-white/[0.08] bg-white/[0.03]"
+        )}
+      >
         <div>
-          <p className="text-xs uppercase text-white/40">Total</p>
-          <p className="text-xl font-black">{formatMoney(total)}</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-white/30">
+            {totalQuantity === 0
+              ? "Seleccioná entradas"
+              : totalQuantity === 1
+                ? "1 entrada"
+                : `${totalQuantity} entradas`}
+          </p>
+          {totalQuantity > 0 && (
+            <p className="mt-0.5 text-2xl font-black">{formatMoney(total)}</p>
+          )}
         </div>
-        <Button type="submit" disabled={loading || total === 0} className="min-w-36">
-          <CreditCard className="size-4" />
-          {loading ? "Creando..." : "Continuar"}
-        </Button>
+        <button
+          type="submit"
+          disabled={totalQuantity === 0}
+          className={cn(
+            "inline-flex min-h-11 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-all",
+            totalQuantity > 0
+              ? "bg-rio-cyan text-black shadow-glow hover:bg-cyan-200"
+              : "bg-white/[0.06] text-white/30"
+          )}
+        >
+          Continuar →
+        </button>
       </div>
     </form>
   );
