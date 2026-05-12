@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { approveOrderForFreeCheckout } from "@/lib/orders";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { activePaymentProvider } from "@/lib/payment-providers";
+import { activePaymentProvider, isFreeCheckoutEnabled } from "@/lib/payment-providers";
 
 const createOrderSchema = z.object({
   event_id: z.string().uuid(),
@@ -11,7 +12,7 @@ const createOrderSchema = z.object({
   buyer_phone: z.string().trim().min(6).max(40),
   buyer_document: z.string().trim().max(40).optional().nullable(),
   payment_provider: z
-    .enum(["mercadopago", "paypal", "apple_pay", "crypto"])
+    .enum(["mercadopago", "paypal", "apple_pay", "crypto", "free"])
     .default(activePaymentProvider),
   items: z
     .array(
@@ -36,7 +37,14 @@ export async function POST(request: Request) {
 
   const payload = parsed.data;
 
-  if (payload.payment_provider !== "mercadopago") {
+  if (payload.payment_provider === "free" && !isFreeCheckoutEnabled()) {
+    return NextResponse.json(
+      { error: "El modo gratis de prueba no está habilitado." },
+      { status: 403 }
+    );
+  }
+
+  if (payload.payment_provider !== "mercadopago" && payload.payment_provider !== "free") {
     return NextResponse.json(
       { error: "Proveedor de pago todavía no disponible para el MVP" },
       { status: 400 }
@@ -121,7 +129,7 @@ export async function POST(request: Request) {
         buyer_document: payload.buyer_document || null,
         total_amount: totalAmount,
         currency: "UYU",
-        payment_provider: "mercadopago",
+        payment_provider: payload.payment_provider === "free" ? "mercadopago" : payload.payment_provider,
         payment_status: "pending",
         external_reference: externalReference
       })
@@ -142,6 +150,14 @@ export async function POST(request: Request) {
     if (itemsError) {
       await supabase.from("orders").delete().eq("id", order.id);
       throw new Error(itemsError.message);
+    }
+
+    if (payload.payment_provider === "free") {
+      await approveOrderForFreeCheckout(order.id);
+      return NextResponse.json({
+        order_id: order.id,
+        checkout_url: `/checkout/success?order_id=${order.id}`
+      });
     }
 
     return NextResponse.json({ order_id: order.id, checkout_url: `/checkout/${order.id}` });

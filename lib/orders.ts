@@ -116,6 +116,75 @@ export async function generateTicketsForApprovedOrder(orderId: string) {
   return { created: tickets.length };
 }
 
+export async function approveOrderForFreeCheckout(orderId: string) {
+  const supabase = getSupabaseAdminClient();
+  const approvedAt = new Date().toISOString();
+
+  const approvePendingOrder = (values: {
+    payment_provider?: string;
+    payment_status: string;
+    approved_at: string;
+  }) =>
+    supabase
+      .from("orders")
+      .update(values)
+      .eq("id", orderId)
+      .eq("payment_status", "pending")
+      .in("payment_provider", ["mercadopago", "free"])
+      .select("id")
+      .maybeSingle();
+
+  let { data: updatedOrder, error: updateError } = await approvePendingOrder({
+    payment_provider: "free",
+    payment_status: "approved",
+    approved_at: approvedAt
+  });
+
+  if (updateError) {
+    const fallback = await approvePendingOrder({
+      payment_status: "approved",
+      approved_at: approvedAt
+    });
+
+    updatedOrder = fallback.data;
+    updateError = fallback.error;
+  }
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  if (updatedOrder?.id) {
+    await supabase.from("payment_events").insert({
+      provider: "free",
+      event_type: "free_checkout_approved",
+      external_id: updatedOrder.id,
+      payload: { order_id: updatedOrder.id },
+      processed: true
+    });
+
+    await generateTicketsForApprovedOrder(updatedOrder.id);
+    return { approved: true, orderId: updatedOrder.id };
+  }
+
+  const { data: existingOrder, error: existingError } = await supabase
+    .from("orders")
+    .select("id, payment_status")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (existingError || !existingOrder) {
+    throw new Error(existingError?.message || "Orden no encontrada");
+  }
+
+  if (existingOrder.payment_status === "approved") {
+    await generateTicketsForApprovedOrder(existingOrder.id);
+    return { approved: true, orderId: existingOrder.id, alreadyApproved: true };
+  }
+
+  return { approved: false, orderId: existingOrder.id, reason: existingOrder.payment_status };
+}
+
 export async function approveOrderFromMercadoPagoPayment(payment: MercadoPagoPaymentLike) {
   if (payment.status !== "approved") {
     return { approved: false, reason: `payment_${payment.status || "unknown"}` };

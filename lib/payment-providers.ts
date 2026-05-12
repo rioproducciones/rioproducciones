@@ -4,10 +4,15 @@ export const paymentProviders: PaymentProvider[] = [
   "mercadopago",
   "paypal",
   "apple_pay",
-  "crypto"
+  "crypto",
+  "free"
 ];
 
 export const activePaymentProvider: PaymentProvider = "mercadopago";
+
+export function isFreeCheckoutEnabled() {
+  return process.env.ENABLE_FREE_CHECKOUT === "true" || process.env.NODE_ENV !== "production";
+}
 
 export const applePayTodo = [
   "TODO: requiere Apple Developer Merchant ID.",

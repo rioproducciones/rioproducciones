@@ -2,7 +2,7 @@ export type UserRole = "owner" | "admin" | "staff";
 
 export type EventStatus = "draft" | "published" | "archived";
 
-export type PaymentProvider = "mercadopago" | "paypal" | "apple_pay" | "crypto";
+export type PaymentProvider = "mercadopago" | "paypal" | "apple_pay" | "crypto" | "free";
 
 export type PaymentStatus =
   | "pending"

@@ -94,8 +94,7 @@ export function OrderStatus({ orderId }: { orderId: string }) {
             </div>
           ) : (
             <div className="rounded-lg border border-yellow-300/25 bg-yellow-300/[0.1] p-4 text-sm text-yellow-50">
-              Estamos confirmando tu pago. Si Mercado Pago ya aprobó la operación, el webhook generará
-              tus QR en unos segundos.
+              Estamos confirmando tu pago o generando tus QR de prueba. Actualizá en unos segundos.
             </div>
           )}
         </div>

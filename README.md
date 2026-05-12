@@ -9,6 +9,7 @@ MVP mobile-first para venta de entradas online con Mercado Pago Checkout Pro, QR
 - Supabase Postgres, Auth, RLS y Realtime
 - Mercado Pago Checkout Pro
 - QR por ticket con token largo no enumerable
+- Apple Wallet pkpass opcional para entradas QR
 - Scanner mobile para staff con cámara
 
 ## Instalación
@@ -79,6 +80,25 @@ El webhook no confía en redirects del frontend: consulta el pago real en Mercad
 6. Volver a `/checkout/success?order_id=...`.
 7. Si el webhook tarda, la pantalla muestra confirmación pendiente y permite refrescar.
 8. Cuando el webhook aprueba la orden, aparecen los links a `/ticket/[token]`.
+
+## Apple Wallet pkpass
+
+Cada entrada puede descargarse como `.pkpass` desde:
+
+```text
+GET /api/tickets/[token]/wallet
+```
+
+El botón `Agregar a Wallet` aparece en `/ticket/[token]` cuando están configuradas las credenciales de PassKit:
+
+- `PASSKIT_PASS_TYPE_IDENTIFIER`
+- `PASSKIT_TEAM_IDENTIFIER`
+- `PASSKIT_WWDR_CERT` o `PASSKIT_WWDR_CERT_PATH`
+- `PASSKIT_SIGNER_CERT` o `PASSKIT_SIGNER_CERT_PATH`
+- `PASSKIT_SIGNER_KEY` o `PASSKIT_SIGNER_KEY_PATH`
+- `PASSKIT_SIGNER_KEY_PASSPHRASE` si la clave tiene passphrase
+
+Los certificados deben venir del Apple Developer Program. El QR del pass usa la misma URL segura de la entrada, por lo que el check-in sigue validando contra Supabase.
 
 ## Probar check-in
 

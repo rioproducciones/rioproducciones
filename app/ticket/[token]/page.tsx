@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarDays, MapPin, ShieldCheck } from "lucide-react";
+import { CalendarDays, MapPin, ShieldCheck, WalletCards } from "lucide-react";
 import { SiteHeader } from "@/components/layout/site-header";
 import { TicketQr } from "@/components/tickets/ticket-qr";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getTicketByToken } from "@/lib/public-data";
 import { getTicketUrl } from "@/lib/tickets";
 import { formatDateTime } from "@/lib/utils";
+import { isWalletPassConfigured } from "@/lib/wallet-pass";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export default async function TicketPage({
     ? ticket.ticket_types[0]
     : ticket.ticket_types) as TicketTypeInfo | null;
   const statusTone = ticket.status === "valid" ? "green" : ticket.status === "used" ? "red" : "yellow";
+  const walletPassEnabled = isWalletPassConfigured();
 
   return (
     <div className="min-h-screen bg-rio-black text-white">
@@ -54,6 +56,15 @@ export default async function TicketPage({
           <div className="mt-5 flex justify-center">
             <TicketQr value={getTicketUrl(ticket.qr_token)} />
           </div>
+          {walletPassEnabled ? (
+            <a
+              href={`/api/tickets/${encodeURIComponent(ticket.qr_token)}/wallet`}
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/[0.15]"
+            >
+              <WalletCards className="size-4 text-rio-cyan" />
+              Agregar a Wallet
+            </a>
+          ) : null}
           <p className="mt-4 break-all font-mono text-xs text-white/[0.42]">{ticket.qr_token.slice(-12).toUpperCase()}</p>
           <div className="mt-5 grid gap-2 rounded-lg border border-white/10 bg-black/[0.24] p-4 text-left text-sm">
             <p className="font-semibold">
