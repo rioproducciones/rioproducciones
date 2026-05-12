@@ -100,6 +100,14 @@ function getPassDateFields(eventDate?: string) {
   };
 }
 
+function getNormalizedEventDate(eventDate?: string) {
+  if (!eventDate) return null;
+
+  const date = new Date(eventDate);
+
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function getPassFilename(ticket: WalletPassTicket) {
   return `rio-${ticket.qr_token.slice(-12).toLowerCase()}.pkpass`;
 }
@@ -114,7 +122,15 @@ export async function buildTicketWalletPass(ticket: WalletPassTicket) {
   const eventName = event?.name || "Entrada Rio";
   const ticketName = ticketType?.name || "Entrada";
   const ticketUrl = getTicketUrl(ticket.qr_token);
-  const logo = await readFile(path.join(process.cwd(), "public", "logo.png"));
+  const normalizedEventDate = getNormalizedEventDate(event?.event_date);
+  const [icon, icon2x, icon3x, logo, logo2x, logo3x] = await Promise.all([
+    readFile(path.join(process.cwd(), "public", "wallet", "icon.png")),
+    readFile(path.join(process.cwd(), "public", "wallet", "icon@2x.png")),
+    readFile(path.join(process.cwd(), "public", "wallet", "icon@3x.png")),
+    readFile(path.join(process.cwd(), "public", "wallet", "logo.png")),
+    readFile(path.join(process.cwd(), "public", "wallet", "logo@2x.png")),
+    readFile(path.join(process.cwd(), "public", "wallet", "logo@3x.png"))
+  ]);
   const certificates = await getPasskitCertificates();
   const passProps: PassProps = {
     formatVersion: 1,
@@ -132,7 +148,6 @@ export async function buildTicketWalletPass(ticket: WalletPassTicket) {
       ticketId: ticket.id,
       qrToken: ticket.qr_token
     },
-    appLaunchURL: ticketUrl,
     ...getPassDateFields(event?.event_date),
     eventTicket: {
       headerFields: [],
@@ -151,13 +166,17 @@ export async function buildTicketWalletPass(ticket: WalletPassTicket) {
         }
       ],
       auxiliaryFields: [
-        {
-          key: "date",
-          label: "Fecha",
-          value: event?.event_date || "",
-          dateStyle: "PKDateStyleMedium",
-          timeStyle: "PKDateStyleShort"
-        },
+        ...(normalizedEventDate
+          ? [
+              {
+                key: "date",
+                label: "Fecha",
+                value: normalizedEventDate,
+                dateStyle: "PKDateStyleMedium" as const,
+                timeStyle: "PKDateStyleShort" as const
+              }
+            ]
+          : []),
         {
           key: "location",
           label: "Lugar",
@@ -197,12 +216,12 @@ export async function buildTicketWalletPass(ticket: WalletPassTicket) {
 
   const pass = new PKPass(
     {
-      "icon.png": logo,
-      "icon@2x.png": logo,
-      "icon@3x.png": logo,
+      "icon.png": icon,
+      "icon@2x.png": icon2x,
+      "icon@3x.png": icon3x,
       "logo.png": logo,
-      "logo@2x.png": logo,
-      "logo@3x.png": logo,
+      "logo@2x.png": logo2x,
+      "logo@3x.png": logo3x,
       "pass.json": Buffer.from(JSON.stringify(passProps))
     },
     certificates
