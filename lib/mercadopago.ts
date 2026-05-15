@@ -55,6 +55,26 @@ export async function getMercadoPagoPayment(paymentId: string) {
   return payment.get({ id: paymentId });
 }
 
+type CreatePaymentBody = {
+  transaction_amount: number;
+  payment_method_id: string;
+  payer: {
+    email: string;
+    identification?: {
+      type: string;
+      number: string;
+    };
+  };
+  installments?: number;
+  statement_descriptor?: string;
+  metadata?: Record<string, string | number | boolean | null>;
+};
+
+export async function createMercadoPagoPayment(body: CreatePaymentBody) {
+  const payment = new Payment(getMercadoPagoClient());
+  return payment.create({ body: body as never });
+}
+
 export function buildBackUrls(orderId: string) {
   const siteUrl = getSiteUrl();
 
